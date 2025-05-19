@@ -4,7 +4,9 @@ from datetime import datetime
 
 class UserBase(BaseModel):
     email: EmailStr
-    username: str
+    first_name: str
+    last_name: str
+    nickname: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
@@ -68,4 +70,4 @@ class Token(BaseModel):
     token_type: str
 
 class TokenData(BaseModel):
-    username: Optional[str] = None 
+    email: Optional[str] = None 

@@ -13,6 +13,7 @@ services:
     environment:
       - SECRET_KEY=your-secret-key-here
       - ENVIRONMENT=development
+      - PYTHONPATH=/app
     networks:
       - app-network
 

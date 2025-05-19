@@ -1,18 +1,28 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from typing import List
-import models
-import schemas
-from database import get_db, engine
+from backend import models
+from backend import schemas
+from backend.database import get_db, engine
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Security
 SECRET_KEY = "your-secret-key-here"  # Change this in production!
@@ -44,13 +54,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        email: str = payload.get("sub")
+        if email is None:
             raise credentials_exception
-        token_data = schemas.TokenData(username=username)
+        token_data = schemas.TokenData(email=email)
     except JWTError:
         raise credentials_exception
-    user = db.query(models.User).filter(models.User.username == token_data.username).first()
+    user = db.query(models.User).filter(models.User.email == token_data.email).first()
     if user is None:
         raise credentials_exception
     return user
@@ -58,32 +68,54 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 # Authentication endpoints
 @app.post("/token", response_model=schemas.Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.username == form_data.username).first()
+    user = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
 # User endpoints
 @app.post("/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(models.User).filter(models.User.email == user.email).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    hashed_password = get_password_hash(user.password)
-    db_user = models.User(
-        email=user.email,
-        username=user.username,
-        hashed_password=hashed_password
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+    try:
+        # Check if email already exists
+        db_user = db.query(models.User).filter(models.User.email == user.email).first()
+        if db_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered. Please use a different email address."
+            )
+        
+        # Create new user
+        hashed_password = get_password_hash(user.password)
+        db_user = models.User(
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            nickname=user.nickname,
+            hashed_password=hashed_password
+        )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating user: {str(e)}"
+        )
+
+@app.get("/users/check/{email}")
+def check_user(email: str, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.email == email).first()
+    return {"exists": user is not None}
 
 # Group endpoints
 @app.post("/groups/", response_model=schemas.Group)

@@ -15,11 +15,11 @@ if 'token' not in st.session_state:
 if 'user' not in st.session_state:
     st.session_state.user = None
 
-def login(username: str, password: str):
+def login(email: str, password: str):
     try:
         response = requests.post(
             f"{API_URL}/token",
-            data={"username": username, "password": password}
+            data={"username": email, "password": password}
         )
         if response.status_code == 200:
             st.session_state.token = response.json()["access_token"]
@@ -117,6 +117,15 @@ def get_scores(exercise_id: int):
         st.error(f"Error fetching scores: {str(e)}")
     return []
 
+def check_user_exists(email: str):
+    try:
+        response = requests.get(f"{API_URL}/users/check/{email}")
+        if response.status_code == 200:
+            return response.json()["exists"]
+    except Exception as e:
+        st.error(f"Error checking user: {str(e)}")
+    return None
+
 # Main app
 st.title("Exercise Competition App")
 
@@ -126,22 +135,56 @@ if not st.session_state.token:
     
     with tab1:
         st.header("Login")
-        username = st.text_input("Username", key="login_username")
+        email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
         if st.button("Login"):
-            if login(username, password):
+            if login(email, password):
                 st.success("Login successful!")
                 st.rerun()
     
     with tab2:
-        st.header("Register")
-        email = st.text_input("Email", key="register_email")
-        username = st.text_input("Username", key="register_username")
-        password = st.text_input("Password", type="password", key="register_password")
-        if st.button("Register"):
-            if register(email, username, password):
-                st.success("Registration successful! Please login.")
-                st.rerun()
+        with st.form("register_form"):
+            st.subheader("Register")
+            email = st.text_input("Email", key="register_email")
+            first_name = st.text_input("First Name", key="register_first_name")
+            last_name = st.text_input("Last Name", key="register_last_name")
+            nickname = st.text_input("Nickname (Optional)", key="register_nickname")
+            password = st.text_input("Password", type="password", key="register_password")
+            submit = st.form_submit_button("Register")
+            
+            if submit:
+                # Validate required fields
+                if not all([email, first_name, last_name, password]):
+                    st.error("Please fill in all required fields.")
+                else:
+                    try:
+                        response = requests.post(
+                            f"{API_URL}/users/",
+                            json={
+                                "email": email,
+                                "first_name": first_name,
+                                "last_name": last_name,
+                                "nickname": nickname if nickname else None,
+                                "password": password
+                            }
+                        )
+                        if response.status_code == 200:
+                            st.success("Registration successful! Please login.")
+                            st.rerun()
+                        else:
+                            try:
+                                error_detail = response.json().get('detail', 'Unknown error')
+                                if "Email already registered" in error_detail:
+                                    st.error("This email is already registered. Please use a different email address.")
+                                else:
+                                    st.error(f"Registration failed: {error_detail}")
+                            except json.JSONDecodeError:
+                                st.error(f"Registration failed: Server returned invalid response. Status code: {response.status_code}")
+                                st.error(f"Response content: {response.text}")
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"Network error: {str(e)}")
+                    except Exception as e:
+                        st.error(f"Unexpected error: {str(e)}")
 
 else:
     # Main app content

@@ -1,7 +1,7 @@
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Float, DateTime, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from .database import Base
+from backend.database import Base
 
 # Association table for user-group relationship
 user_group = Table(
@@ -16,7 +16,9 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
-    username = Column(String, unique=True, index=True)
+    first_name = Column(String)
+    last_name = Column(String)
+    nickname = Column(String)
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
     

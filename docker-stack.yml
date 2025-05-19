@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  backend:
+    image: exercise-app-backend:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - exercise-db:/app/database
+    environment:
+      - SECRET_KEY=your-secret-key-here
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    networks:
+      - app-network
+
+  frontend:
+    image: exercise-app-frontend:latest
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://backend:8000
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: overlay
+
+volumes:
+  exercise-db:
+    driver: local 
